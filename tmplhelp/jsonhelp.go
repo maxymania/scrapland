@@ -21,7 +21,7 @@ import (
 	"encoding/json"
 )
 
-// Loads a template from a http.FileSystem object
+// Loads a json-document from a http.FileSystem object
 func LoadJson(fs http.FileSystem,n string) (interface{},error) {
 	var i interface{} = nil
 	f,e := fs.Open(n)
