@@ -19,6 +19,8 @@ import (
 	"sync"
 )
 
+var ConnectionBrokenError = errors.New("fcgi ConnectionBrokenError")
+
 const FCGI_LISTENSOCK_FILENO uint8 = 0
 const FCGI_HEADER_LEN uint8 = 8
 const VERSION_1 uint8 = 1
@@ -124,26 +126,23 @@ type FCGIClient struct {
 	active    map[uint16]respObj
 	stream    chan respObj
 	ctr       chan uint16
+	broken    chan struct{}
 }
 
 /*
  Creates a new FCGI client.
 
- If the second parameter is an int, the connection to net.Dial("tcp",h+":"+args[0]) is established.
- If the second parameter is an string, the connection to net.Dial("unix",args[0]) is established.
+ If the second parameter is an int, the connection to net.Dial("tcp",h+":"+args) is established.
+ If the second parameter is an string, the connection to net.Dial("unix",args) is established.
  */
-func New(h string, args ...interface{}) (fcgi *FCGIClient, err error) {
+func New(h string, args interface{}) (fcgi *FCGIClient, err error) {
 	var conn net.Conn
-	if len(args) != 1 {
-		err = errors.New("fcgi: not enough params")
-		return
-	}
-	switch args[0].(type) {
+	switch args.(type) {
 	case int:
-		addr := h + ":" + strconv.FormatInt(int64(args[0].(int)), 10)
+		addr := h + ":" + strconv.FormatInt(int64(args.(int)), 10)
 		conn, err = net.Dial("tcp", addr)
 	case string:
-		addr := args[0].(string)
+		addr := args.(string)
 		conn, err = net.Dial("unix", addr)
 	default:
 		err = errors.New("fcgi: we only accept int (port) or string (socket) params.")
@@ -154,10 +153,18 @@ func New(h string, args ...interface{}) (fcgi *FCGIClient, err error) {
 		active:    make(map[uint16]respObj),
 		stream:    make(chan respObj,1024),
 		ctr:       make(chan uint16,1),
+		broken:    make(chan struct{}),
 	}
 	fcgi.ctr <- 1
 	go fcgi.worker()
 	return
+}
+func (this *FCGIClient) Broken() bool {
+	select {
+	case <- this.broken: return true
+	default:
+	}
+	return false
 }
 func (this *FCGIClient) worker(){
 	rec := &record{}
@@ -328,7 +335,13 @@ func (w *streamWriter) Close() error {
 	return w.c.writeRecord(w.recType, w.reqId, nil)
 }
 
-func (this *FCGIClient) Close() error { return this.rwc.Close() }
+func (this *FCGIClient) Close() error {
+	select {
+	case <- this.broken:
+	default: close(this.broken)
+	}
+	return this.rwc.Close()
+}
 
 func (this *FCGIClient) Request(env map[string]string, reqStr string) (retout []byte, reterr []byte, err error) {
 
@@ -355,7 +368,10 @@ func (this *FCGIClient) Request(env map[string]string, reqStr string) (retout []
 		}
 	}
 	
-	<- ro.done
+	select {
+	case <- ro.done:
+	case <- this.broken: err=ConnectionBrokenError
+	}
 	retout = out.Bytes()
 	reterr = ber.Bytes()
 	
@@ -391,7 +407,10 @@ func (this *FCGIClient) RequestIO(env map[string]string, reqStr string, rout, re
 		}
 	}
 
-	<- ro.done
+	select {
+	case <- ro.done:
+	case <- this.broken: err=ConnectionBrokenError
+	}
 
 	return
 }

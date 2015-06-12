@@ -25,12 +25,14 @@ package override
 
 import (
 	"net/http"
+	"regexp"
 )
 
 type Patterned struct{
 	http.Handler
 	Prefix string
 	Exact string
+	Regexp *regexp.Regexp
 }
 func (p *Patterned) Match(r *http.Request) bool{
 	path := r.URL.Path
@@ -40,6 +42,8 @@ func (p *Patterned) Match(r *http.Request) bool{
 		return path[:lpre]==p.Prefix
 	} else if p.Exact!="" {
 		return path==p.Exact
+	} else if p.Regexp!=nil {
+		return p.Regexp.MatchString(path)
 	}
 	return false
 }
@@ -54,6 +58,19 @@ func (o *Overrider) Add(prefix string, h http.Handler) {
 func (o *Overrider) AddExact(exact string, h http.Handler) {
 	o.Overs = append(o.Overs,&Patterned{Handler:h,Exact:exact})
 }
+func (o *Overrider) AddRegexp(re string, h http.Handler) error{
+	rx,err := regexp.Compile(re)
+	if err!=nil { return err }
+	o.Overs = append(o.Overs,&Patterned{Handler:h,Regexp:rx})
+	return nil
+}
+func (o *Overrider) AddRegexpPOSIX(re string, h http.Handler) error{
+	rx,err := regexp.CompilePOSIX(re)
+	if err!=nil { return err }
+	o.Overs = append(o.Overs,&Patterned{Handler:h,Regexp:rx})
+	return nil
+}
+
 func (o *Overrider) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	for _,p := range o.Overs {
 		if p.Match(req) {
