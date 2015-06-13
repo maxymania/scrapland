@@ -24,7 +24,11 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"io"
+	"regexp"
+	"bytes"
 )
+
+var whiteSpace = regexp.MustCompile(`\s+`)
 
 type Transf func(*html.Node)
 
@@ -82,6 +86,7 @@ func FindTB(n *html.Node) (t *html.Node,b *html.Node){ return find(n,n) }
 
 // like html.Render but renders only the child elements.
 func Render(w io.Writer,n *html.Node) error{
+	if n==nil { return nil }
 	begin := n.FirstChild
 	end := n.LastChild
 	if begin==nil { return nil }
@@ -92,6 +97,73 @@ func Render(w io.Writer,n *html.Node) error{
 		begin = begin.NextSibling
 	}
 	return nil
+}
+
+func findAttr(h *html.Node,k string) string {
+	for _,a := range h.Attr {
+		if a.Key==k { return a.Val }
+	}
+	return ""
+}
+
+func lurkFor(begin, end *html.Node,sel string) *html.Node{
+	if begin==nil { return nil }
+	for {
+		switch begin.Type {
+		case html.ElementNode:
+			switch sel[0]{
+			case '.':
+				for _,cls := range whiteSpace.Split(findAttr(begin,"class"),-1) {
+					if cls==sel[1:] { return begin }
+				}
+			case '#':
+				if findAttr(begin,"id")==sel[1:] { return begin }
+			default:
+				if begin.Data==sel { return begin }
+			}
+			fallthrough
+		case html.DocumentNode:
+			res := lurkFor(begin.FirstChild,begin.LastChild,sel)
+			if res!=nil { return res }
+		}
+		if end==begin { return nil }
+		begin = begin.NextSibling
+	}
+	return nil
+}
+// finds title and body in an html doc
+func LurkFor(n *html.Node,sel string) *html.Node{
+	if sel=="" { return n }
+	if sel[0]=='?' {
+		r := lurkFor(n,n,sel)
+		if r==nil { return n }
+		return r
+	}
+	return lurkFor(n,n,sel)
+}
+
+
+func extractText(begin, end *html.Node,d io.Writer) {
+	if begin==nil { return }
+	for {
+		switch begin.Type {
+		case html.TextNode:
+			d.Write([]byte(begin.Data))
+		case html.ElementNode,html.DocumentNode:
+			extractText(begin.FirstChild,begin.LastChild,d)
+		}
+		if end==begin { return }
+		begin = begin.NextSibling
+	}
+	return
+}
+func ExtractText(h *html.Node) string {
+	w := &bytes.Buffer{}
+	extractText(h,h,w)
+	return w.String()
+}
+func ExtractTextIO(h *html.Node, w io.Writer) {
+	extractText(h,h,w)
 }
 
 

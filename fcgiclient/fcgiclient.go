@@ -156,7 +156,7 @@ func New(h string, args interface{}) (fcgi *FCGIClient, err error) {
 		broken:    make(chan struct{}),
 	}
 	fcgi.ctr <- 1
-	go fcgi.worker()
+	if conn!=nil { go fcgi.worker() }
 	return
 }
 func (this *FCGIClient) Broken() bool {
