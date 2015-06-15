@@ -9,7 +9,7 @@ accessing FastCGI servers such as php-fpm, compose multiple `http.Handler`s toge
 ## Endorsed Public API Packages
 
 - [container](https://godoc.org/github.com/maxymania/scrapland/container)
-- [fcgibinding](https://godoc.org/github.com/maxymania/scrapland/fcgibinding)
+- [fcgibinding](https://godoc.org/github.com/maxymania/scrapland/fcgibinding) (Unstable yet! API Might change!)
 - [override](https://godoc.org/github.com/maxymania/scrapland/override)
 - [tmplhelp](https://godoc.org/github.com/maxymania/scrapland/tmplhelp)
 - [webscrape](https://godoc.org/github.com/maxymania/scrapland/webscrape)
